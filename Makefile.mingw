@@ -1,0 +1,17 @@
+CC = gcc
+
+LIBS    = -Lcompat/lib -lcurl -lOpenCL -L/mingw32/lib -lwldap32 -lws2_32 -ljansson -lpthread
+LDFLAGS = -s -Wl,-rpath,/usr/local/lib -Wl,-Bstatic -static-libgcc
+CFLAGS  = -Os -DCURL_STATICLIB -DWIN32 -DWIN32_LEAN_AND_MEAN -Wno-deprecated-declarations -Wformat -Icompat/include
+OBJS    = miner.o ocl.o util.o streebog.o
+
+all: gostoclminer
+
+%.o: %.c $(HEADERS)
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+gostoclminer: $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+clean:
+	$(RM) *.o gostoclminer

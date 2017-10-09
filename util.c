@@ -129,7 +129,7 @@ json_t *json_rpc_call(const char *url, const char *userpass, const char *rpc_req
 	if (rc)
 		goto err_out;
 
-	val = json_loads(all_data.buf, &err);
+	val = json_loads(all_data.buf, 0, &err);
 	if (!val) {
 		fprintf(stderr, "JSON failed(%d): %s\n", err.line, err.text);
 		goto err_out;
@@ -224,5 +224,22 @@ timeval_subtract (
 
   /* Return 1 if result is negative. */
   return x->tv_sec < y->tv_sec;
+}
+
+uint32_t swap32(uint32_t value)
+{
+#if defined(__x86_64__) || defined(__i386__)
+	__asm__
+	(
+		"bswap %0"
+		: "=r"(value) 
+		: "0"(value)
+		:
+	);
+	return value;
+#else
+    value = ((value & 0xFF00FF00) >> 8) | ((value & 0x00FF00FF) << 8);
+    return (value<<16) | (value>>16);
+#endif
 }
 

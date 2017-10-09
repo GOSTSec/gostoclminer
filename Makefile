@@ -1,21 +1,23 @@
-INCLUDEPATHS=-I${ATISTREAMSDKROOT}/include/ -L${ATISTREAMSDKROOT}/
+INCLUDEPATHS=-I.
 
-LIBS=-lOpenCL -ljansson -lcurl
+LIBS=-lOpenCL -ljansson -lcurl -lpthread 
+# LDFLAGS = -L$(AMDAPPSDKROOT)/lib/x86_64
+LDFLAGS = -L/usr/local/cuda/lib64
 
 DEFS=
 DEBUGFLAGS=-g
 CFLAGS=-O3 -Wformat $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS)
 HEADERS=
 
-OBJS=miner.o ocl.o findnonce.o util.o
+OBJS=miner.o ocl.o util.o streebog.o
 
-all: oclminer
+all: gostoclminer
 
 %.o: %.c $(HEADERS)
 	gcc -c $(CFLAGS) -o $@ $<
 
-oclminer: $(OBJS) 
-	gcc $(CFLAGS) -o $@ $^ $(LIBS)
+gostoclminer: $(OBJS) 
+	gcc $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
-	-rm *.o oclminer
+	-rm *.o gostoclminer

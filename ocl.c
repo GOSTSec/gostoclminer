@@ -3,14 +3,19 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h> 
+#include <netdb.h>
+#endif
+
 #include <time.h>
 #include <sys/time.h>
 #include <pthread.h>
 
-#include "findnonce.h"
 #include "ocl.h"
 
 char *file_contents(const char *filename, int *length)
@@ -210,7 +215,7 @@ _clState *initCl(int gpu, char *name, size_t nameSize) {
 	// Load CL file, build CL program object, create CL kernel object
 	/////////////////////////////////////////////////////////////////
 	//
-	const char * filename  = "oclminer.cl";
+	const char * filename  = "gostminer.cl";
 	int pl;
 	char *source = file_contents(filename, &pl);
 	size_t sourceSize[] = {(size_t)pl};
@@ -223,7 +228,7 @@ _clState *initCl(int gpu, char *name, size_t nameSize) {
 	}
 
 	/* create a cl program executable for all the devices specified */
-	status = clBuildProgram(clState->program, 1, &devices[gpu], NULL, NULL, NULL);
+	status = clBuildProgram(clState->program, 1, &devices[gpu], "", NULL, NULL);
 	if(status != CL_SUCCESS) 
 	{   
 		printf("Error: Building Program (clBuildProgram)\n");
@@ -237,7 +242,7 @@ _clState *initCl(int gpu, char *name, size_t nameSize) {
 	}
 
 	/* get a kernel object handle for a kernel with the given name */
-	clState->kernel = clCreateKernel(clState->program, "oclminer", &status);
+	clState->kernel = clCreateKernel(clState->program, "gostminer", &status);
 	if(status != CL_SUCCESS)
 	{
 		printf("Error: Creating Kernel from program. (clCreateKernel)\n");
@@ -254,16 +259,16 @@ _clState *initCl(int gpu, char *name, size_t nameSize) {
 		return NULL;
 	}
 
-    clState->inputBuffer = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, sizeof(dev_blk_ctx), NULL, &status);
+    clState->inputBuffer = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, sizeof (dev_blk_ctx), NULL, &status);
     if(status != CL_SUCCESS) {
         printf("Error: clCreateBuffer (inputBuffer)\n");
-        return;
+        return NULL;
     }   
 
 	clState->outputBuffer = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, sizeof(uint32_t) * MAXTHREADS, NULL, &status);
 	if(status != CL_SUCCESS) {
 		printf("Error: clCreateBuffer (outputBuffer)\n");
-		return;
+		return NULL;
 	}
 
 	return clState;

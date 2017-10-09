@@ -16,8 +16,14 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/time.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <sys/resource.h>
 #include <sys/select.h>
+#endif
+
 #include <pthread.h>
 #include <getopt.h>
 #include <jansson.h>
@@ -25,13 +31,13 @@
 #include <math.h>
 #include "miner.h"
 
-#include "findnonce.h"
 #include "ocl.h"
+#include "streebog.h"
 
 #define VERSION "0.1"
 
-#define PROGRAM_NAME		"oclminer"
-#define DEF_RPC_URL		"http://127.0.0.1:8332/"
+#define PROGRAM_NAME		"gostoclminer"
+#define DEF_RPC_URL		"http://127.0.0.1:9376/"
 #define DEF_RPC_USERPASS	"rpcuser:rpcpass"
 
 enum {
@@ -126,12 +132,6 @@ static bool jobj_binary(const json_t *obj, const char *key,
 
 static bool work_decode(const json_t *val, struct work_t *work)
 {
-	if (!jobj_binary(val, "midstate",
-			 work->midstate, sizeof(work->midstate))) {
-		fprintf(stderr, "JSON inval midstate\n");
-		goto err_out;
-	}
-
 	if (!jobj_binary(val, "data", work->data, sizeof(work->data))) {
 		fprintf(stderr, "JSON inval data\n");
 		goto err_out;
@@ -185,8 +185,9 @@ static void submit_work(struct work_t *work)
 
 	res = json_object_get(val, "result");
 
-	printf("PROOF OF WORK RESULT: %s\n",
-		json_is_true(res) ? "true (yay!!!)" : "false (booooo)");
+	printf("PROOF OF WORK RESULT: %s\n", json_is_true(res) ? "true (yay!!!)" : "false (booooo)");
+	if (!json_is_true(res))
+		printf ("REASON: %s\n", json_string_value(json_object_get(val, "reject-reason")));		
 
 	json_decref(val);
 
@@ -320,9 +321,15 @@ static void *miner_thread(void *thr_id_int)
 				continue;
 			}
 
-			precalc_hash(&work[frame].blk, (uint32_t *)(work[frame].midstate), (uint32_t *)(work[frame].data + 64));
+			memcpy (work[frame].blk.data, work[frame].data, 80);
+			int k;
+			for (k = 0; k < 19; k++) work[frame].blk.data[k] = swap32 (work[frame].blk.data[k]);
+			memcpy (work[frame].blk.target, work[frame].target, 32);
 
-			work[frame].blk.nonce = 0;
+			/*work[frame].blk.target[6] = 0xFFFFFFFF; 
+			work[frame].blk.target[7] = 0x000000FF;*/
+
+			work[frame].blk.data[19] = 0;
 			work[frame].valid = true;
 			work[frame].ready = 0;
 			
@@ -332,9 +339,9 @@ static void *miner_thread(void *thr_id_int)
 
 		gettimeofday(&tv_start, NULL);
 	
-		int threads = 102400 * 4;
+		int threads = 65536; // TODO:
 		globalThreads[0] = threads;
-		localThreads[0] = 128;
+		localThreads[0] = 256;
 
 		status = clEnqueueWriteBuffer(clState->commandQueue, clState->inputBuffer, CL_TRUE, 0,
 				sizeof(dev_blk_ctx), (void *)&work[frame].blk, 0, NULL, NULL);
@@ -348,56 +355,46 @@ static void *miner_thread(void *thr_id_int)
 
         clFlush(clState->commandQueue);
 
-		hashes_done = 1024 * threads;
+		hashes_done = 1024 * threads;	
 
-		if (work[res_frame].ready) {
-			rc = false;
-
-			uint32_t bestG = ~0;
-			uint32_t nonce;
+		if (work[res_frame].ready) 
+		{	
 			int j;
-			for(j = 0; j < work[res_frame].ready; j++) {
-				if(res[j]) { 
-					uint32_t start = (work[res_frame].res_nonce + j)<<10;
-					uint32_t my_g, my_nonce;
-					my_g = postcalc_hash(&work[res_frame].blk, &work[res_frame], start, start + 1026, &my_nonce, opt_pool, &h0count);
-
-					if (!opt_pool) {
-						if (opt_debug)
-							fprintf(stderr, "DEBUG: H0 within %u .. %u, best G = %08x, nonce = %08x\n", start, start + 1024, my_g, my_nonce);
-
-						if(my_g < bestG) {
-							bestG = my_g;
-							nonce = my_nonce;
-							if (opt_debug)
-								fprintf(stderr, "new best\n");
-						}       
+			for(j = 0; j < work[res_frame].ready; j++) 
+			{
+				if(res[j]) 
+				{ 
+					uint32_t hash[8];
+					work[frame].blk.data[19] = res[j];
+					gostd_hash (hash, work[frame].blk.data);
+					work[frame].blk.data[19] = 0;
+					int k;
+					for (k = 0; k < 8; k++) printf ("%08x ", hash[k]);
+					printf ("\n");
+					if (swap32 (hash[0]) <= work[frame].blk.target[7])
+					{	
+						uint32_t *target1 = (uint32_t *)(work[res_frame].target + 24);
+						uint32_t *target2 = (uint32_t *)(work[res_frame].target + 28);
+						printf("Found solution for %08x %08x: %08x\n", *target1, *target2, res[j]);
+						submit_nonce(&work[res_frame], swap32 (res[j]));
+						block++;
+						h0count++;
+						need_work = true;
+						break;
 					}
-
-					rc = true;
+					else
+						printf ("result for %08x does not validate on CPU!", res[j]);
 				}       
 			}       
 			
 			work[res_frame].ready = false;
-
-			uint32_t *target = (uint32_t *)(work[res_frame].target + 24);
-
-			if(!opt_pool && rc && bestG <= *target) {
-				printf("Found solution for %08x: %08x %u\n", *target, bestG, nonce);
-
-				submit_nonce(&work[res_frame], nonce);
-
-				block++;
-
-				need_work = true;
-			}
-
 		}
 
-		if (h0count != 0) {
+		if (h0count != 0) 
+		{
 			double secs;
 			secs = time2secs(&tv_start0);
-			hashrates[thr_id] = h0count * pow(2, 256) / (secs * 1e6 * (pow(2, 224) - 1.0));
+			hashrates[thr_id] = h0count * pow (2, 256) / (secs * 1e6 * (pow (2, 224) - 1.0));
 		}
 
         status = clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_TRUE, 0, 
@@ -406,11 +403,11 @@ static void *miner_thread(void *thr_id_int)
 
 		res_frame = frame;
 		work[res_frame].ready = threads;
-		work[res_frame].res_nonce = work[res_frame].blk.nonce;
+		work[res_frame].res_nonce = work[res_frame].blk.data[19];
 
-		work[frame].blk.nonce += threads;
+		work[frame].blk.data[19] += threads;
 
-		if (work[frame].blk.nonce > 4000000 - threads)
+		if (work[frame].blk.data[19] > 4000000 - threads)
 			need_work = true;
 
 		failures = 0;
@@ -423,8 +420,8 @@ static void show_usage(void)
 {
 	int i;
 
-	printf("oclminer version %s\n\n", VERSION);
-	printf("Usage:\tminerd [options]\n\nSupported options:\n");
+	printf("gostoclminer version %s\n\n", VERSION);
+	printf("Usage:\tgostoclminer [options]\n\nSupported options:\n");
 	for (i = 0; i < ARRAY_SIZE(options_help); i++) {
 		struct option_help *h;
 

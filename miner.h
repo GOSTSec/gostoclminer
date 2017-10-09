@@ -1,5 +1,6 @@
 #ifndef __MINER_H__
 #define __MINER_H__
+#include <inttypes.h>
 #include "ocl.h"
 
 #ifndef ARRAY_SIZE
@@ -14,5 +15,6 @@ extern char *bin2hex(unsigned char *p, size_t len);
 extern int hex2bin(unsigned char *p, const char *hexstr, size_t len);
 
 extern int timeval_subtract (struct timeval *result, struct timeval *x, struct timeval *y);
+extern uint32_t swap32(uint32_t value);
 
 #endif /* __MINER_H__ */

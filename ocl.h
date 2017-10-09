@@ -6,6 +6,8 @@
 #include <CL/cl.h>
 #endif
 
+#define MAXTHREADS 256000
+
 typedef struct {
 	cl_context context;
 	cl_kernel kernel;
@@ -14,6 +16,26 @@ typedef struct {
 	cl_mem inputBuffer;
 	cl_mem outputBuffer;
 } _clState;
+
+typedef struct {
+    uint32_t data[20];
+	uint32_t target[8];
+} dev_blk_ctx;
+
+
+struct work_t {
+	unsigned char	data[128];
+	unsigned char	hash1[64];
+	unsigned char	midstate[32];
+	unsigned char	target[32];
+
+	unsigned char	hash[32];
+	uint32_t		output[MAXTHREADS];
+	uint32_t		res_nonce;
+	uint32_t		valid;
+	uint32_t		ready;
+	dev_blk_ctx		blk;
+};
 
 extern char *file_contents(const char *filename, int *length);
 extern int clDevicesNum();

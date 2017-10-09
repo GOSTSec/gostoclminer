@@ -1,7 +1,7 @@
 Build for Windows:  
 1. Install MSYS2
 2. Inside MSYS2's window install packages.  pacman -S mingw-w64-i686-gcc mingw-w64-i686-jansson git make  
-3. Obtain a copy of this repository. https://github.com/GOSTSec/gostoclminer.git  
+3. Obtain a copy of this repository. git clone https://github.com/GOSTSec/gostoclminer.git  
 4. cd gostoclminer; make -f Makefile.mingw  
 
 Run:  

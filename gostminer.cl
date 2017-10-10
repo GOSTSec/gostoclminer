@@ -886,7 +886,7 @@ typedef struct {
 } dev_blk_ctx;
 
 __kernel __attribute__((vec_type_hint(uint))) WGS void gostminer(
-	__constant dev_blk_ctx *ctx, __global uint *output)
+	__constant dev_blk_ctx *ctx, __global uint * foundNonce)
 {
     // move to shared memory
     __local sph_u64 T0S[256];    
@@ -935,5 +935,6 @@ __kernel __attribute__((vec_type_hint(uint))) WGS void gostminer(
     hash1[7] += 0x0100000000000000;
     GOST_g_0(hash, hash1);		
     // result is first 32 bytes of hash
-    output[myid] = (SWAP4 (LODWORD (hash[0])) <= ctx->target[7] && SWAP4 (HIDWORD (hash[0])) <= ctx->target[6]) ? nonce : 0; 
+    if (SWAP4 (LODWORD (hash[0])) <= ctx->target[7] && SWAP4 (HIDWORD (hash[0])) <= ctx->target[6])
+		*foundNonce = nonce; 
 }

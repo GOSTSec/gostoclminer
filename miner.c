@@ -270,7 +270,7 @@ static void *miner_thread(void *thr_id_int)
 	int thr_id = (unsigned long) thr_id_int;
 	int failures = 0;
 
-	uint32_t res[MAXTHREADS];
+	uint32_t nonce = 0;
 
 	size_t globalThreads[1];
 	size_t localThreads[1];
@@ -282,17 +282,11 @@ static void *miner_thread(void *thr_id_int)
 	status = clSetKernelArg(clState->kernel, 0,  sizeof(cl_mem), (void *)&clState->inputBuffer);
 	if(status != CL_SUCCESS) { printf("Error: Setting kernel argument 1.\n"); return false; }
 
-	status = clSetKernelArg(clState->kernel, 1,  sizeof(cl_mem), (void *)&clState->outputBuffer);
+	status = clSetKernelArg(clState->kernel, 1,  sizeof(cl_mem), (void *)&clState->foundNonce);
 	if(status != CL_SUCCESS) { printf("Error: Setting kernel argument 2.\n"); return false; }
 
-	struct work_t *work;
-	work = malloc(sizeof(struct work_t)*2);
+	struct work_t work;
 
-	work[0].ready = 0;
-	work[1].ready = 0;
-
-	int frame = 0;
-	int res_frame = 0;
 	int my_block = block;
 	bool need_work = true;
 	unsigned long hashes_done;
@@ -302,16 +296,16 @@ static void *miner_thread(void *thr_id_int)
 		struct timeval tv_start;
 		bool rc;
 
-		if (need_work || my_block != block) {
-			frame++;
-			frame %= 2;
+		if (need_work || my_block != block) 
+		{
 
 			if (opt_debug)
 			fprintf(stderr, "getwork\n");
 
-			rc = getwork(&work[frame]);
+			rc = getwork(&work);
 
-			if (!rc) {
+			if (!rc) 
+			{
 				fprintf(stderr, "getwork failed, ");
 
 				if ((opt_retries >= 0) && (++failures > opt_retries)) {
@@ -325,17 +319,17 @@ static void *miner_thread(void *thr_id_int)
 				continue;
 			}
 
-			memcpy (work[frame].blk.data, work[frame].data, 80);
+			memcpy (work.blk.data, work.data, 80);
 			int k;
-			for (k = 0; k < 19; k++) work[frame].blk.data[k] = swap32 (work[frame].blk.data[k]);
-			memcpy (work[frame].blk.target, work[frame].target, 32);
+			for (k = 0; k < 19; k++) work.blk.data[k] = swap32 (work.blk.data[k]);
+			memcpy (work.blk.target, work.target, 32);
 
-			/*work[frame].blk.target[6] = 0xFFFFFFFF;
-			work[frame].blk.target[7] = 0x000000FF;*/
+			/*work.blk.target[6] = 0xFFFFFFFF;
+			work.blk.target[7] = 0x000000FF;*/
 
-			work[frame].blk.data[19] = 0;
-			work[frame].valid = true;
-			work[frame].ready = 0;
+			work.blk.data[19] = 0;
+			work.valid = true;
+			nonce = 0;
 
 			my_block = block;
 			need_work = false;
@@ -348,7 +342,11 @@ static void *miner_thread(void *thr_id_int)
 		localThreads[0] = 256;
 
 		status = clEnqueueWriteBuffer(clState->commandQueue, clState->inputBuffer, CL_TRUE, 0,
-		sizeof(dev_blk_ctx), (void *)&work[frame].blk, 0, NULL, NULL);
+		sizeof(dev_blk_ctx), (void *)&work.blk, 0, NULL, NULL);
+		if(status != CL_SUCCESS) { printf("Error: clEnqueueWriteBuffer failed.\n"); return 0; }
+
+		status = clEnqueueWriteBuffer(clState->commandQueue, clState->foundNonce, CL_TRUE, 0,
+		sizeof(uint32_t), (void *)&nonce, 0, NULL, NULL);
 		if(status != CL_SUCCESS) { printf("Error: clEnqueueWriteBuffer failed.\n"); return 0; }
 
 		clFinish(clState->commandQueue);
@@ -359,52 +357,43 @@ static void *miner_thread(void *thr_id_int)
 
 		clFlush(clState->commandQueue);
 
-		if (work[res_frame].ready)
-		{
-			int j;
-			for(j = 0; j < work[res_frame].ready; j++)
-			{
-				if(res[j])
-				{
-					uint32_t hash[8];
-					work[frame].blk.data[19] = res[j];
-					gostd_hash (hash, work[frame].blk.data);
-					work[frame].blk.data[19] = 0;
-					int k;
-					for (k = 0; k < 8; k++) printf ("%08x ", hash[k]);
-					printf ("\n");
-					if (swap32 (hash[0]) <= work[frame].blk.target[7])
-					{
-						uint32_t *target1 = (uint32_t *)(work[res_frame].target + 24);
-						uint32_t *target2 = (uint32_t *)(work[res_frame].target + 28);
-						printf("Found solution for %08x %08x: %08x\n", *target1, *target2, res[j]);
-						submit_nonce(&work[res_frame], swap32 (res[j]));
-						block++;
-						need_work = true;
-						break;
-					}
-					else
-					printf ("result for %08x does not validate on CPU!", res[j]);
-				}
-			}
-
-			work[res_frame].ready = false;
-		}
-
-		status = clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_TRUE, 0,
-		sizeof(uint32_t) * threads, res, 0, NULL, NULL);
+		status = clEnqueueReadBuffer(clState->commandQueue, clState->foundNonce, CL_TRUE, 0,
+		sizeof(uint32_t), &nonce, 0, NULL, NULL);
 		if(status != CL_SUCCESS) { printf("Error: clEnqueueReadBuffer failed. (clEnqueueReadBuffer)\n"); return 0; }
 
 		hashes_done = threads;
 		hashmeter(thr_id, &tv_start, hashes_done);
+	
+		if(nonce)
+		{
+			uint32_t hash[8];
+			work.blk.data[19] = nonce;
+			gostd_hash (hash, work.blk.data);
+			work.blk.data[19] = 0;
+			int k;
+			for (k = 0; k < 8; k++) printf ("%08x ", hash[k]);
+			printf ("\n");
+			if (swap32 (hash[0]) <= work.blk.target[7])
+			{
+				uint32_t *target1 = (uint32_t *)(work.target + 24);
+				uint32_t *target2 = (uint32_t *)(work.target + 28);
+				printf("Found solution for %08x %08x: %08x\n", *target1, *target2, nonce);
+				submit_nonce(&work, swap32 (nonce));
+				block++;
+				need_work = true;
+				nonce = 0;
+				continue;
+			}
+			else
+				printf ("result for %08x does not validate on CPU!", nonce);
+		}
+		
 
-		res_frame = frame;
-		work[res_frame].ready = threads;
-		work[res_frame].res_nonce = work[res_frame].blk.data[19];
+		// not found	
+		work.res_nonce = work.blk.data[19];
+		work.blk.data[19] += threads;
 
-		work[frame].blk.data[19] += threads;
-
-		if (work[frame].blk.data[19] > 4000000 - threads)
+		if (work.blk.data[19] > 4000000 - threads)
 		need_work = true;
 
 		failures = 0;

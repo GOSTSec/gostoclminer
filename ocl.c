@@ -265,9 +265,9 @@ _clState *initCl(int gpu, char *name, size_t nameSize) {
         return NULL;
     }   
 
-	clState->outputBuffer = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, sizeof(uint32_t) * MAXTHREADS, NULL, &status);
+	clState->foundNonce = clCreateBuffer(clState->context, CL_MEM_READ_WRITE, sizeof(uint32_t), NULL, &status);
 	if(status != CL_SUCCESS) {
-		printf("Error: clCreateBuffer (outputBuffer)\n");
+		printf("Error: clCreateBuffer (foundNonce)\n");
 		return NULL;
 	}
 

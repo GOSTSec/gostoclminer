@@ -6,7 +6,6 @@
 #include <CL/cl.h>
 #endif
 
-#define MAXTHREADS 262145 /* (2^18)+1 */
 
 typedef struct {
 	cl_context context;
@@ -14,7 +13,7 @@ typedef struct {
 	cl_command_queue commandQueue;
 	cl_program program;
 	cl_mem inputBuffer;
-	cl_mem outputBuffer;
+	cl_mem foundNonce;
 } _clState;
 
 typedef struct {
@@ -30,10 +29,8 @@ struct work_t {
 	unsigned char	target[32];
 
 	unsigned char	hash[32];
-	uint32_t		output[MAXTHREADS];
 	uint32_t		res_nonce;
 	uint32_t		valid;
-	uint32_t		ready;
 	dev_blk_ctx		blk;
 };
 

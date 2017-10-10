@@ -209,13 +209,13 @@ double time2secs(struct timeval *tv_start) {
 static void hashmeter(int thr_id, struct timeval *tv_start,
 		      unsigned long hashes_done)
 {
-	double khashes, secs;
+	double mhashes, secs;
 
 	secs = time2secs(tv_start);
 
-	khashes = hashes_done / 1000.0;
+	mhashes = hashes_done / 1000.0 / 1000.0;
 
-	hashrates[thr_id] = khashes / secs;
+	hashrates[thr_id] = mhashes / secs;
 }
 
 static void print_hashmeter(double hashrate, char *rates) {
@@ -289,11 +289,6 @@ static void *miner_thread(void *thr_id_int)
 	unsigned long hashes_done;
 	hashes_done = 0;
 
-	unsigned int h0count = 0;
-	struct timeval tv_start0;
-
-	gettimeofday(&tv_start0, NULL);
-
 	while (1) {
 		struct timeval tv_start;
 		bool rc;
@@ -355,8 +350,6 @@ static void *miner_thread(void *thr_id_int)
 
         clFlush(clState->commandQueue);
 
-		hashes_done = 1024 * threads;	
-
 		if (work[res_frame].ready) 
 		{	
 			int j;
@@ -378,7 +371,6 @@ static void *miner_thread(void *thr_id_int)
 						printf("Found solution for %08x %08x: %08x\n", *target1, *target2, res[j]);
 						submit_nonce(&work[res_frame], swap32 (res[j]));
 						block++;
-						h0count++;
 						need_work = true;
 						break;
 					}
@@ -390,16 +382,13 @@ static void *miner_thread(void *thr_id_int)
 			work[res_frame].ready = false;
 		}
 
-		if (h0count != 0) 
-		{
-			double secs;
-			secs = time2secs(&tv_start0);
-			hashrates[thr_id] = h0count * pow (2, 256) / (secs * 1e6 * (pow (2, 224) - 1.0));
-		}
 
         status = clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_TRUE, 0, 
 				sizeof(uint32_t) * threads, res, 0, NULL, NULL);   
         if(status != CL_SUCCESS) { printf("Error: clEnqueueReadBuffer failed. (clEnqueueReadBuffer)\n"); return 0; }
+
+		hashes_done = threads;	
+		hashmeter(thr_id, &tv_start, hashes_done);
 
 		res_frame = frame;
 		work[res_frame].ready = threads;

@@ -1,13 +1,13 @@
-
 /*
- * Copyright 2010 Jeff Garzik
- *           2011 Nils Schneider
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option) 
- * any later version.  See COPYING for more details.
- */
+* Copyright 2010 Jeff Garzik
+*           2011 Nils Schneider
+*           2017 GOSTSec team
+*
+* This program is free software; you can redistribute it and/or modify it
+* under the terms of the GNU General Public License as published by the Free
+* Software Foundation; either version 2 of the License, or (at your option)
+* any later version.  See COPYING for more details.
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,14 +36,15 @@
 
 #define VERSION "0.1"
 
-#define PROGRAM_NAME		"gostoclminer"
-#define DEF_RPC_URL		"http://127.0.0.1:9376/"
-#define DEF_RPC_USERPASS	"rpcuser:rpcpass"
+#define PROGRAM_NAME        "gostoclminer"
+#define DEF_RPC_URL         "http://127.0.0.1:9376/"
+#define DEF_RPC_USERPASS    "rpcuser:rpcpass"
 
-enum {
-	STAT_SLEEP_INTERVAL		= 1,
-	STAT_CTR_INTERVAL		= 10000000,
-	FAILURE_INTERVAL		= 30,
+enum
+{
+	STAT_SLEEP_INTERVAL     = 1,
+	STAT_CTR_INTERVAL       = 10000000,
+	FAILURE_INTERVAL        = 30,
 };
 
 int opt_debug = false;
@@ -56,60 +57,69 @@ static const bool opt_time = true;
 static int opt_n_threads = 1;
 static char *rpc_url = DEF_RPC_URL;
 static char *userpass = DEF_RPC_USERPASS;
+static int opt_intensity = 16;
 
 int block = 0;
 
 double hashrates[16];
 _clState *clStates[16];
 
-struct option_help {
+struct option_help
+{
 	const char	*name;
 	const char	*helptext;
 };
 
-static struct option_help options_help[] = {
+static struct option_help options_help[] =
+{
 	{ "help",
-	  "(-h) Display this help text" },
+		"(-h) Display this help text" },
 
 	{ "ndevs",
-	  "(-n) Display number of detected GPUs" },
+		"(-n) Display number of detected GPUs" },
 
 	{ "debug",
-	  "(-D) Enable debug output (default: off)" },
+		"(-D) Enable debug output (default: off)" },
 
 	{ "pool",
-	  "(-m) Enable pool mode (default: off)" },
+		"(-m) Enable pool mode (default: off)" },
 
 	{ "protocol-dump",
-	  "(-P) Verbose dump of protocol-level activities (default: off)" },
+		"(-P) Verbose dump of protocol-level activities\n"
+		"\t(default: off)" },
 
 	{ "retries N",
-	  "(-r N) Number of times to retry, if JSON-RPC call fails\n"
-	  "\t(default: 10; use -1 for \"never\")" },
+		"(-r N) Number of times to retry, if JSON-RPC call fails\n"
+		"\t(default: 10; use -1 for \"never\")" },
 
 	{ "url URL",
-	  "URL for bitcoin JSON-RPC server "
-	  "(default: " DEF_RPC_URL ")" },
+		"URL for bitcoin JSON-RPC server\n"
+		"\t(default: " DEF_RPC_URL ")" },
 
 	{ "userpass USERNAME:PASSWORD",
-	  "Username:Password pair for bitcoin JSON-RPC server "
-	  "(default: " DEF_RPC_USERPASS ")" },
+		"Username:Password pair for bitcoin JSON-RPC server\n"
+		"\t(default: " DEF_RPC_USERPASS ")" },
+
+	{ "intensity N",
+		"(-i N) Intensity of mining\n"
+		"\t(default: 16, min = 8, max = 18)" }
 };
 
-static struct option options[] = {
+static struct option options[] =
+{
 	{ "help", 0, NULL, 'h' },
 	{ "debug", 0, NULL, 'D' },
 	{ "protocol-dump", 0, NULL, 'P' },
 	{ "retries", 1, NULL, 'r' },
 	{ "url", 1, NULL, 1001 },
 	{ "userpass", 1, NULL, 1002 },
+	{ "intensity", 1, NULL, 'i' },
 	{ "ndevs", 0, NULL, 'n' },
 	{ "pool", 0, NULL, 'm' },
 	{ }
 };
 
-static bool jobj_binary(const json_t *obj, const char *key,
-			void *buf, size_t buflen)
+static bool jobj_binary(const json_t *obj, const char *key, void *buf, size_t buflen)
 {
 	const char *hexstr;
 	json_t *tmp;
@@ -125,7 +135,7 @@ static bool jobj_binary(const json_t *obj, const char *key,
 		return false;
 	}
 	if (!hex2bin(buf, hexstr, buflen))
-		return false;
+	return false;
 
 	return true;
 }
@@ -151,7 +161,7 @@ static bool work_decode(const json_t *val, struct work_t *work)
 
 	return true;
 
-err_out:
+	err_out:
 	return false;
 }
 
@@ -166,15 +176,15 @@ static void submit_work(struct work_t *work)
 	/* build hex string */
 	hexstr = bin2hex(work->data, sizeof(work->data));
 	if (!hexstr)
-		goto out;
+	goto out;
 
 	/* build JSON-RPC request */
 	sprintf(s,
-	      "{\"method\": \"getwork\", \"params\": [ \"%s\" ], \"id\":1}\r\n",
-		hexstr);
+	"{\"method\": \"getwork\", \"params\": [ \"%s\" ], \"id\":1}\r\n",
+	hexstr);
 
 	if (opt_debug)
-		fprintf(stderr, "DBG: sending RPC call:\n%s", s);
+	fprintf(stderr, "DBG: sending RPC call:\n%s", s);
 
 	/* issue JSON-RPC request */
 	val = json_rpc_call(rpc_url, userpass, s);
@@ -187,15 +197,16 @@ static void submit_work(struct work_t *work)
 
 	printf("PROOF OF WORK RESULT: %s\n", json_is_true(res) ? "true (yay!!!)" : "false (booooo)");
 	if (!json_is_true(res))
-		printf ("REASON: %s\n", json_string_value(json_object_get(val, "reject-reason")));		
+	printf ("REASON: %s\n", json_string_value(json_object_get(val, "reject-reason")));
 
 	json_decref(val);
 
-out:
+	out:
 	free(hexstr);
 }
 
-double time2secs(struct timeval *tv_start) {
+double time2secs(struct timeval *tv_start)
+{
 	struct timeval tv_end, diff;
 	double secs;
 
@@ -206,25 +217,22 @@ double time2secs(struct timeval *tv_start) {
 	return secs;
 }
 
-static void hashmeter(int thr_id, struct timeval *tv_start,
-		      unsigned long hashes_done)
+static void hashmeter(int thr_id, struct timeval *tv_start, unsigned long hashes_done)
 {
 	double mhashes, secs;
-
 	secs = time2secs(tv_start);
-
 	mhashes = hashes_done / 1000.0 / 1000.0;
-
 	hashrates[thr_id] = mhashes / secs;
 }
 
-static void print_hashmeter(double hashrate, char *rates) {
-	printf("\r                                                                            \rHashMeter: %.2f Mhash/sec (%s)", hashrate, rates);
+static void print_hashmeter(double hashrate, char *rates)
+{
+	printf("HashMeter: %.2f Mhash/sec (%s)\n", hashrate, rates);
 	fflush(stdout);
 }
 
-
-static bool getwork(struct work_t *work) {
+static bool getwork(struct work_t *work)
+{
 	static const char *rpc_req = "{\"method\": \"getwork\", \"params\": [], \"id\":0}\r\n";
 	json_t *val;
 	bool rc;
@@ -246,14 +254,15 @@ static bool getwork(struct work_t *work) {
 	json_decref(val);
 
 	return true;
-} 
+}
 
-void submit_nonce(struct work_t *work, uint32_t nonce) {
-       work->data[64+12+0] = (nonce>>0) & 0xff;
-       work->data[64+12+1] = (nonce>>8) & 0xff;
-       work->data[64+12+2] = (nonce>>16) & 0xff;
-       work->data[64+12+3] = (nonce>>24) & 0xff;
-       submit_work(work);
+void submit_nonce(struct work_t *work, uint32_t nonce)
+{
+	work->data[64+12+0] = (nonce>>0) & 0xff;
+	work->data[64+12+1] = (nonce>>8) & 0xff;
+	work->data[64+12+2] = (nonce>>16) & 0xff;
+	work->data[64+12+3] = (nonce>>24) & 0xff;
+	submit_work(work);
 }
 
 static void *miner_thread(void *thr_id_int)
@@ -298,7 +307,7 @@ static void *miner_thread(void *thr_id_int)
 			frame %= 2;
 
 			if (opt_debug)
-				fprintf(stderr, "getwork\n");
+			fprintf(stderr, "getwork\n");
 
 			rc = getwork(&work[frame]);
 
@@ -321,42 +330,42 @@ static void *miner_thread(void *thr_id_int)
 			for (k = 0; k < 19; k++) work[frame].blk.data[k] = swap32 (work[frame].blk.data[k]);
 			memcpy (work[frame].blk.target, work[frame].target, 32);
 
-			/*work[frame].blk.target[6] = 0xFFFFFFFF; 
+			/*work[frame].blk.target[6] = 0xFFFFFFFF;
 			work[frame].blk.target[7] = 0x000000FF;*/
 
 			work[frame].blk.data[19] = 0;
 			work[frame].valid = true;
 			work[frame].ready = 0;
-			
+
 			my_block = block;
 			need_work = false;
 		}
 
 		gettimeofday(&tv_start, NULL);
-	
-		int threads = 65536; // TODO:
+
+		int threads = 1 << (opt_intensity); // TODO:
 		globalThreads[0] = threads;
 		localThreads[0] = 256;
 
 		status = clEnqueueWriteBuffer(clState->commandQueue, clState->inputBuffer, CL_TRUE, 0,
-				sizeof(dev_blk_ctx), (void *)&work[frame].blk, 0, NULL, NULL);
+		sizeof(dev_blk_ctx), (void *)&work[frame].blk, 0, NULL, NULL);
 		if(status != CL_SUCCESS) { printf("Error: clEnqueueWriteBuffer failed.\n"); return 0; }
 
-        clFinish(clState->commandQueue);
+		clFinish(clState->commandQueue);
 
-        status = clEnqueueNDRangeKernel(clState->commandQueue, clState->kernel, 1, NULL, 
-				globalThreads, localThreads, 0,  NULL, NULL);
+		status = clEnqueueNDRangeKernel(clState->commandQueue, clState->kernel, 1, NULL,
+		globalThreads, localThreads, 0,  NULL, NULL);
 		if(status != CL_SUCCESS) { printf("Error: Enqueueing kernel onto command queue. (clEnqueueNDRangeKernel)\n"); return 0; }
 
-        clFlush(clState->commandQueue);
+		clFlush(clState->commandQueue);
 
-		if (work[res_frame].ready) 
-		{	
+		if (work[res_frame].ready)
+		{
 			int j;
-			for(j = 0; j < work[res_frame].ready; j++) 
+			for(j = 0; j < work[res_frame].ready; j++)
 			{
-				if(res[j]) 
-				{ 
+				if(res[j])
+				{
 					uint32_t hash[8];
 					work[frame].blk.data[19] = res[j];
 					gostd_hash (hash, work[frame].blk.data);
@@ -365,7 +374,7 @@ static void *miner_thread(void *thr_id_int)
 					for (k = 0; k < 8; k++) printf ("%08x ", hash[k]);
 					printf ("\n");
 					if (swap32 (hash[0]) <= work[frame].blk.target[7])
-					{	
+					{
 						uint32_t *target1 = (uint32_t *)(work[res_frame].target + 24);
 						uint32_t *target2 = (uint32_t *)(work[res_frame].target + 28);
 						printf("Found solution for %08x %08x: %08x\n", *target1, *target2, res[j]);
@@ -375,19 +384,18 @@ static void *miner_thread(void *thr_id_int)
 						break;
 					}
 					else
-						printf ("result for %08x does not validate on CPU!", res[j]);
-				}       
-			}       
-			
+					printf ("result for %08x does not validate on CPU!", res[j]);
+				}
+			}
+
 			work[res_frame].ready = false;
 		}
 
+		status = clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_TRUE, 0,
+		sizeof(uint32_t) * threads, res, 0, NULL, NULL);
+		if(status != CL_SUCCESS) { printf("Error: clEnqueueReadBuffer failed. (clEnqueueReadBuffer)\n"); return 0; }
 
-        status = clEnqueueReadBuffer(clState->commandQueue, clState->outputBuffer, CL_TRUE, 0, 
-				sizeof(uint32_t) * threads, res, 0, NULL, NULL);   
-        if(status != CL_SUCCESS) { printf("Error: clEnqueueReadBuffer failed. (clEnqueueReadBuffer)\n"); return 0; }
-
-		hashes_done = threads;	
+		hashes_done = threads;
 		hashmeter(thr_id, &tv_start, hashes_done);
 
 		res_frame = frame;
@@ -397,7 +405,7 @@ static void *miner_thread(void *thr_id_int)
 		work[frame].blk.data[19] += threads;
 
 		if (work[frame].blk.data[19] > 4000000 - threads)
-			need_work = true;
+		need_work = true;
 
 		failures = 0;
 	}
@@ -423,43 +431,53 @@ static void show_usage(void)
 
 static void parse_arg (int key, char *arg)
 {
-	int v, i;
+	int v;
 
 	switch(key) {
-	case 'm':
-		opt_pool = true;
+		case 'm':
+			opt_pool = true;
 		break;
-	case 'n':
-		opt_ndevs = true;
-		break;
-	case 'D':
-		opt_debug = true;
-		break;
-	case 'P':
-		opt_protocol = true;
-		break;
-	case 'r':
-		v = atoi(arg);
-		if (v < -1 || v > 9999)	/* sanity check */
-			show_usage();
 
-		opt_retries = v;
+		case 'n':
+			opt_ndevs = true;
 		break;
-	case 1001:			/* --url */
-		if (strncmp(arg, "http://", 7) &&
-		    strncmp(arg, "https://", 8))
-			show_usage();
 
-		rpc_url = arg;
+		case 'D':
+			opt_debug = true;
 		break;
-	case 1002:			/* --userpass */
-		if (!strchr(arg, ':'))
-			show_usage();
 
-		userpass = arg;
+		case 'P':
+			opt_protocol = true;
 		break;
-	default:
-		show_usage();
+
+		case 'r':
+			v = atoi(arg);
+			if (v < -1 || v > 9999)
+				show_usage();
+			opt_retries = v;
+		break;
+
+		case 'i':
+			v = atoi(arg);
+			if (v < 8 || v > 18)
+				show_usage();
+			opt_intensity = v;
+		break;
+
+		case 1001:			/* --url */
+			if (strncmp(arg, "http://", 7) && strncmp(arg, "https://", 8))
+				show_usage();
+			rpc_url = arg;
+		break;
+
+		case 1002:			/* --userpass */
+			if (!strchr(arg, ':'))
+				show_usage();
+			userpass = arg;
+		break;
+
+		default:
+			show_usage();
 	}
 }
 
@@ -468,7 +486,7 @@ static void parse_cmdline(int argc, char *argv[])
 	int key;
 
 	while (1) {
-		key = getopt_long(argc, argv, "DPh?nm", options, NULL);
+		key = getopt_long(argc, argv, "D:P:h:r:i:?:n:m", options, NULL );
 		if (key < 0)
 			break;
 
@@ -503,7 +521,7 @@ int main (int argc, char *argv[])
 		printf("initCl() finished. Found %s\n", name);
 
 		if (pthread_create(&t, NULL, miner_thread,
-				   (void *)(unsigned long) i)) {
+		(void *)(unsigned long) i)) {
 			fprintf(stderr, "thread %d create failed\n", i);
 			return 1;
 		}
@@ -511,7 +529,7 @@ int main (int argc, char *argv[])
 		sleep(1);	/* don't pound RPC server all at once */
 	}
 
-	fprintf(stderr, "%d miner threads started\n", i);
+	fprintf(stderr, "%d miner threads with %d GPU threads started\n", i, (int) 1 << (opt_intensity));
 
 	/* main loop */
 	struct timeval tv;
@@ -556,4 +574,3 @@ int main (int argc, char *argv[])
 
 	return 0;
 }
-

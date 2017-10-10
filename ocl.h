@@ -6,7 +6,7 @@
 #include <CL/cl.h>
 #endif
 
-#define MAXTHREADS 256000
+#define MAXTHREADS 262145 /* (2^18)+1 */
 
 typedef struct {
 	cl_context context;

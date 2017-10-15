@@ -165,6 +165,20 @@ static bool work_decode(const json_t *val, struct work_t *work)
 	return false;
 }
 
+static bool gbt_work_decode(const json_t *val, struct work_t *work)
+{
+	json_t *err = json_object_get(val, "error");
+	if (err && !json_is_null(err)) 
+    {
+		fprintf(stderr, "GBT not supported, block height unavailable");
+		return false;
+	}
+
+    json_t *key = json_object_get(val, "height");
+    work->height = (uint32_t) json_integer_value(key);
+
+    return true;
+}
 static void submit_work(struct work_t *work)
 {
 	char *hexstr = NULL;
@@ -256,6 +270,24 @@ static bool getwork(struct work_t *work)
 	return true;
 }
 
+static bool getblocktemplate(struct work_t *work)
+{
+	static const char *rpc_req =
+	"{\"method\": \"getblocktemplate\", \"params\": [], \"id\":9}\r\n";
+
+	json_t * val = json_rpc_call(rpc_url, userpass, rpc_req);
+
+	if (!val) {
+		fprintf(stderr, "json_rpc_call failed, ");
+		return false;
+	}
+
+	bool rc = gbt_work_decode(json_object_get(val, "result"), work);
+	json_decref(val);
+
+	return rc;
+}
+
 void submit_nonce(struct work_t *work, uint32_t nonce)
 {
 	work->data[64+12+0] = (nonce>>0) & 0xff;
@@ -286,6 +318,7 @@ static void *miner_thread(void *thr_id_int)
 	if(status != CL_SUCCESS) { printf("Error: Setting kernel argument 2.\n"); return false; }
 
 	struct work_t work;
+    work.height = 0;
 
 	int my_block = block;
 	bool need_work = true;
@@ -318,6 +351,11 @@ static void *miner_thread(void *thr_id_int)
 				sleep(FAILURE_INTERVAL);
 				continue;
 			}
+
+            uint32_t prev_height = work.height;
+            rc = getblocktemplate (&work);
+            if (rc && work.height > prev_height)
+                printf ("block %i\n", work.height);
 
 			memcpy (work.blk.data, work.data, 80);
 			int k;

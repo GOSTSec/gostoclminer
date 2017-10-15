@@ -31,6 +31,7 @@ struct work_t {
 	unsigned char	hash[32];
 	uint32_t		res_nonce;
 	uint32_t		valid;
+    uint32_t        height;
 	dev_blk_ctx		blk;
 };
 
